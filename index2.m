@@ -1,12 +1,14 @@
-fid = fopen('resultado3.pcd','wt');
-fprintf(fid, '# .PCD v.7 - Point Cloud Data file format\nVERSION .7\nFIELDS x y z rgb\nSIZE 4 4 4 4\nTYPE F F F F\nCOUNT 1 1 1 1\nWIDTH 38140\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\nPOINTS 38140\nDATA ascii\n');
-[previous, distance] = depthToCloud(imread(strcat('00000-depth.png')));
-previous = reshape(previous, 3, []);
+fid = fopen('resultado11.pcd','wt');
+fprintf(fid, '# .PCD v.7 - Point Cloud Data file format\nVERSION .7\nFIELDS x y z rgb\nSIZE 4 4 4 4\nTYPE F F F F\nCOUNT 1 1 1 1\nWIDTH 8293403\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\nPOINTS 8293403\nDATA ascii\n');
+[previous, distance] = depthToCloud(imread(strcat('00600-depth.png')));
 pts = reshape(previous,size(previous,1)*size(previous,2)/3,3);
  for j=1:size(pts, 1)
         fprintf(fid, '%f %f %f 4.2108e+06\n', pts(j, 1), pts(j, 2), pts(j, 3));
  end
- for i=1:25:887
+ R = [1 0 0; 0 1 0; 0 0 1];
+ T = [0 0 0];
+ accTM = [R(1, 1), R(1, 2), R(1, 3), T(1); R(2, 1), R(2, 2), R(2, 3), T(2); R(3, 1), R(3, 2), R(3, 3), T(3); 0 0 0 1]
+ for i=601:630
     if (i<10)
         [pcloud, distance] = depthToCloud(imread(strcat('0000',int2str(i),'-depth.png')));
     elseif (i<100)
@@ -14,27 +16,33 @@ pts = reshape(previous,size(previous,1)*size(previous,2)/3,3);
     else
         [pcloud, distance] = depthToCloud(imread(strcat('00',int2str(i),'-depth.png')));
     end
-    %{
-    pts = reshape(pcloud,size(pcloud,1)*size(pcloud,2),3);
-    pts = bsxfun(@plus,poses(i,5:7),quatrotate([poses(i,1) -poses(i,2:4)],pts));
-    for j=1:size(pts, 1)
-        fprintf(fid, '%f %f %f 4.2108e+06\n', pts(j, 1), pts(j, 2), pts(j, 3));
-    end
-    %}
-    %TR * p + TT = q.
-    
-    pts = reshape(pcloud,size(pcloud,1)*size(pcloud,2),3);
-    pts = reshape(pts, 3, []);
-    [TR, TT] = icp(pts, previous, 10, 'EdgeRejection', true, 'Boundary', bound, 'Matching', 'kDtree');
-    pts = TR*pts;
-    i
-    pts = bsxfun(@plus, TT, pts);
+    %[R,T] = icp(q,p,10);
+    %R * p + T = q.
+    pts = reshape(pcloud, 3, []);
+    previous = reshape(previous, 3, []);
+    [TR, TT] = icp(previous, pts, 20, 'EdgeRejection', true, 'Boundary', bound, 'Matching', 'kDtree');
+    TM = [TR(1, 1), TR(1, 2), TR(1, 3), TT(1); TR(2, 1), TR(2, 2), TR(2, 3), TT(2); TR(3, 1), TR(3, 2), TR(3, 3), TT(3); 0 0 0 1]
+    accTM = accTM*TM;
+    quat = rotm2quat([accTM(1,1), accTM(1, 2), accTM(1, 3); accTM(2, 1), accTM(2, 2), accTM(2, 3); accTM(3, 1), accTM(3, 2), accTM(3, 3)]);
+    %pts = accTM * pts;
     pts = reshape(pts,size(pts,1)*size(pts,2)/3,3);
+    pts = quatrotate(quat, pts);
+    pts = bsxfun(@plus, [accTM(1, 4), accTM(2, 4), accTM(3, 4)], pts);
+    %pts = reshape(pcloud,size(pcloud,1)*size(pcloud,2),3);
+    %pts = quatrotate(quat, pts);
+    %pts = reshape(pts, 3, []);
+    %pts = bsxfun(@plus, T, pts);
+    %pts = R*pts + repmat(T,1,length(pts));
+    previous = pts; 
     for j=1:size(pts, 1)
-        fprintf(fid, '%f %f %f 4.2108e+06\n', pts(j, 1), pts(j, 2), pts(j, 3));
+        if (isnan(pts(j,1)))
+            continue
+        else
+            fprintf(fid, '%f %f %f 4.2108e+06\n', pts(j, 1), pts(j, 2), pts(j, 3));
+        end
     end
-    previus = pts;
-end
+    i
+ end
 fclose(fid);
 
 
